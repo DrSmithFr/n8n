@@ -1,6 +1,9 @@
 networks:
-  n8n_network:
+  static-ip:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 10.6.0.0/16
 
 volumes:
   db_storage:
@@ -33,31 +36,13 @@ x-shared: &shared
       condition: service_healthy
 
 services:
-  nginx:
-    image: nginx:1.27-alpine
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf
-    networks:
-      - n8n_network
-      - default
-    depends_on:
-      - n8n
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
-
   postgres:
     image: postgres:16
     restart: always
     networks:
-      - n8n_network
-      - default
+      default: ~
+      static-ip:
+        ipv4_address: 10.6.0.4
     environment:
       - POSTGRES_USER
       - POSTGRES_PASSWORD
@@ -75,8 +60,9 @@ services:
     image: redis:6-alpine
     restart: always
     networks:
-      - n8n_network
-      - default
+      default: ~
+      static-ip:
+        ipv4_address: 10.6.0.5
     volumes:
       - redis_storage:/data
     healthcheck:
@@ -88,10 +74,9 @@ services:
   n8n:
     <<: *shared
     networks:
-      - n8n_network
-      - default
-    ports:
-      - 5678:5678
+      default: ~
+      static-ip:
+        ipv4_address: 10.6.0.10
     healthcheck:
       test: wget --spider http://localhost:5678/healthz > /dev/null 2>&1 || exit 1
       interval: 30s
