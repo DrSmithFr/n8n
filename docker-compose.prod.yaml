@@ -1,0 +1,25 @@
+networks:
+  static-ip:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.6.0.0/16
+
+services:
+  postgres:
+    networks:
+      default: ~
+      static-ip:
+        ipv4_address: 10.6.0.4
+
+  redis:
+    networks:
+      default: ~
+      static-ip:
+        ipv4_address: 10.6.0.5
+
+  n8n:
+    networks:
+      default: ~
+      static-ip:
+        ipv4_address: 10.6.0.10
