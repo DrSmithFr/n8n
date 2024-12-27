@@ -1,2 +1,2 @@
 .env
-docker-compose.local.yaml
+docker-compose.override.yaml
