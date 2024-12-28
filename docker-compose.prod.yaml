@@ -6,6 +6,12 @@ networks:
         - subnet: 10.6.0.0/16
 
 services:
+  ollama:
+    networks:
+      default: ~
+      static-ip:
+        ipv4_address: 10.6.0.20
+
   postgres:
     networks:
       default: ~

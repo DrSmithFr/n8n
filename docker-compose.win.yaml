@@ -1,4 +1,8 @@
 services:
+  ollama:
+    ports:
+      - "11434:11434"
+
   postgres:
     ports:
       - "5432:5432"

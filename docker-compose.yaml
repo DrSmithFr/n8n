@@ -1,14 +1,8 @@
-networks:
-  static-ip:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 10.6.0.0/16
-
 volumes:
   db_storage:
   n8n_storage:
   redis_storage:
+  ollama_storage:
 
 x-shared: &shared
   restart: always
@@ -36,15 +30,18 @@ x-shared: &shared
       condition: service_healthy
 
 services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: always
+    volumes:
+      - ollama_storage:/root/.ollama
+
   postgres:
     build:
       context: ./postgres
       dockerfile: Dockerfile
     restart: always
-    networks:
-      default: ~
-      static-ip:
-        ipv4_address: 10.6.0.4
     environment:
       - POSTGRES_USER
       - POSTGRES_PASSWORD
@@ -61,10 +58,6 @@ services:
   redis:
     image: redis:6-alpine
     restart: always
-    networks:
-      default: ~
-      static-ip:
-        ipv4_address: 10.6.0.5
     volumes:
       - redis_storage:/data
     healthcheck:
@@ -75,10 +68,6 @@ services:
 
   n8n:
     <<: *shared
-    networks:
-      default: ~
-      static-ip:
-        ipv4_address: 10.6.0.10
     healthcheck:
       test: wget --spider http://localhost:5678/healthz > /dev/null 2>&1 || exit 1
       interval: 30s
