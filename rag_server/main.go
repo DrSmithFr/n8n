@@ -134,7 +134,7 @@ func handleRAGRequest(w http.ResponseWriter, r *http.Request) {
 
 func processQuestion(question, prompt, embeddingModel, chatModel string) ResponseItem {
 	const query = `
-		SELECT text
+		SELECT text, metadata
 		FROM n8n_vectors
 		ORDER BY embedding <=> $1
 		LIMIT 10;
@@ -161,25 +161,41 @@ func processQuestion(question, prompt, embeddingModel, chatModel string) Respons
 	}
 	defer rows.Close()
 
-	var contextTexts []string
+	var contextItems []struct {
+		Text     string
+		Metadata json.RawMessage
+	}
 	for rows.Next() {
 		var text string
-		if err := rows.Scan(&text); err != nil {
+		var metadataRaw json.RawMessage
+		if err := rows.Scan(&text, &metadataRaw); err != nil {
 			logMessage := fmt.Sprintf("Failed to scan row for question '%s': %v", question, err)
 			log.Println(logMessage)
 			continue
 		}
-		contextTexts = append(contextTexts, text)
+
+		contextItems = append(contextItems, struct {
+			Text     string
+			Metadata json.RawMessage
+		}{
+			Text:     text,
+			Metadata: metadataRaw,
+		})
 	}
 
-	if len(contextTexts) == 0 {
+	if len(contextItems) == 0 {
 		return ResponseItem{
 			Question: question,
-			Answer:   "The database do not contain enough information to answer the question.",
+			Answer:   "The database does not contain enough information to answer the question.",
 		}
 	}
 
-	answer, err := generateAnswer(question, contextTexts, prompt, chatModel)
+	var context []string
+	for _, item := range contextItems {
+		context = append(context, fmt.Sprintf("Text: %s\nMetadata: %s", item.Text, item.Metadata))
+	}
+
+	answer, err := generateAnswer(question, context, prompt, chatModel)
 	if err != nil {
 		logMessage := fmt.Sprintf("Failed to generate answer for question '%s': %v", question, err)
 		log.Println(logMessage)
