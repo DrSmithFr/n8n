@@ -2,22 +2,12 @@ package services
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
-	"log"
 	"rag_server/models"
-	"strconv"
 )
 
 // ProcessQuestion processes a single question using embeddings and chat
 func ProcessQuestion(db *sql.DB, question, prompt, embeddingModel, chatModel string) models.ResponseItem {
-	const query = `
-		SELECT text, metadata
-		FROM n8n_vectors
-		ORDER BY embedding <=> $1
-		LIMIT 10;
-	`
-
 	// Step 1: Generate embedding for the question
 	embedding, err := GetEmbedding(question, embeddingModel)
 	if err != nil {
@@ -28,38 +18,14 @@ func ProcessQuestion(db *sql.DB, question, prompt, embeddingModel, chatModel str
 		}
 	}
 
-	vectorString := ToVectorString(embedding)
-
 	// Step 2: Query the database for related documents
-	rows, err := db.Query(query, vectorString)
+	contextItems, err := FetchContextItems(db, embedding)
 	if err != nil {
-		logMessage := fmt.Sprintf("Failed to query database for question '%s': %v", question, err)
+		logMessage := fmt.Sprintf("Failed to fetch context items for question '%s': %v", question, err)
 		return models.ResponseItem{
 			Question: question,
 			Answer:   logMessage,
 		}
-	}
-	defer rows.Close()
-
-	var contextItems []struct {
-		Text     string
-		Metadata json.RawMessage
-	}
-	for rows.Next() {
-		var text string
-		var metadataRaw json.RawMessage
-		if err := rows.Scan(&text, &metadataRaw); err != nil {
-			log.Printf("Failed to scan row for question '%s': %v", question, err)
-			continue
-		}
-
-		contextItems = append(contextItems, struct {
-			Text     string
-			Metadata json.RawMessage
-		}{
-			Text:     text,
-			Metadata: metadataRaw,
-		})
 	}
 
 	if len(contextItems) == 0 {
@@ -90,20 +56,4 @@ func ProcessQuestion(db *sql.DB, question, prompt, embeddingModel, chatModel str
 		Question: question,
 		Answer:   answer,
 	}
-}
-
-// ToVectorString converts a slice of floats into a PostgreSQL-compatible vector string
-func ToVectorString(data []float64) string {
-	buf := make([]byte, 0, 2+16*len(data))
-	buf = append(buf, '[')
-
-	for i, value := range data {
-		if i > 0 {
-			buf = append(buf, ',')
-		}
-		buf = strconv.AppendFloat(buf, value, 'f', -1, 64)
-	}
-
-	buf = append(buf, ']')
-	return string(buf)
 }
