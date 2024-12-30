@@ -175,7 +175,7 @@ func processQuestion(question, prompt, embeddingModel, chatModel string) Respons
 	if len(contextTexts) == 0 {
 		return ResponseItem{
 			Question: question,
-			Answer:   "The provided documents do not contain enough information to answer the question.",
+			Answer:   "The database do not contain enough information to answer the question.",
 		}
 	}
 
@@ -255,7 +255,7 @@ func getEmbedding(text, model string) ([]float64, error) {
 		return nil, fmt.Errorf("No embedding data returned")
 	}
 
-	return embeddingResponse.Data[0].Embedding, nil
+	return embeddingResponse.Data[0].Embedding[:1536], nil
 }
 
 func generateAnswer(question string, context []string, prompt, model string) (string, error) {
