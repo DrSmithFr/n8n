@@ -9,8 +9,8 @@ import (
 	"strconv"
 )
 
-// FetchContextItems récupère les documents similaires à partir de la base de données
-func FetchContextItems(db *sql.DB, embedding []float64) ([]models.ContextItem, error) {
+// SearchItems récupère les documents similaires à partir de la base de données
+func SearchItems(db *sql.DB, embedding []float64) ([]models.ContextItem, error) {
 	const query = `
 		SELECT text, metadata
 		FROM n8n_vectors

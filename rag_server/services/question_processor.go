@@ -19,7 +19,7 @@ func ProcessQuestion(db *sql.DB, question, prompt, embeddingModel, chatModel str
 	}
 
 	// Step 2: Query the database for related documents
-	contextItems, err := FetchContextItems(db, embedding)
+	contextItems, err := SearchItems(db, embedding)
 	if err != nil {
 		logMessage := fmt.Sprintf("Failed to fetch context items for question '%s': %v", question, err)
 		return models.ResponseItem{
