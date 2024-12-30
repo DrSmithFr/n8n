@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"sync"
 
 	_ "github.com/lib/pq"
@@ -29,6 +30,8 @@ type ResponseItem struct {
 type OpenAIEmbeddingRequest struct {
 	Input string `json:"input"`
 	Model string `json:"model"`
+
+	EncodingFormat string `json:"encoding_format"`
 }
 
 type OpenAIEmbeddingResponse struct {
@@ -58,10 +61,18 @@ var db *sql.DB
 func main() {
 	var err error
 
+	host := os.Getenv("POSTGRES_HOST")
+	if host == "" {
+		host = "postgres"
+	}
+
 	// Initialize database connection
 	db, err = sql.Open("postgres", fmt.Sprintf(
-		"host=postgres user=%s password=%s dbname=%s sslmode=disable",
-		os.Getenv("POSTGRES_USER"), os.Getenv("POSTGRES_PASSWORD"), os.Getenv("POSTGRES_DB"),
+		"host=%s user=%s password=%s dbname=%s sslmode=disable",
+		host,
+		os.Getenv("POSTGRES_USER"),
+		os.Getenv("POSTGRES_PASSWORD"),
+		os.Getenv("POSTGRES_DB"),
 	))
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
@@ -86,7 +97,7 @@ func handleRAGRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.Embedding == "" {
-		req.Embedding = "text-embedding-3-small"
+		req.Embedding = "text-embedding-3-large"
 	}
 
 	if req.Model == "" {
@@ -125,7 +136,6 @@ func processQuestion(question, prompt, embeddingModel, chatModel string) Respons
 	const query = `
 		SELECT text
 		FROM n8n_vectors
-		WHERE embedding <=> $1
 		ORDER BY embedding <=> $1
 		LIMIT 10;
 	`
@@ -140,9 +150,9 @@ func processQuestion(question, prompt, embeddingModel, chatModel string) Respons
 		}
 	}
 
-	rows, err := db.Query(query, embedding)
+	rows, err := db.Query(query, ToVectorString(embedding))
 	if err != nil {
-		logMessage := fmt.Sprintf("Failed to query database for question '%s': %v", question, err)
+		logMessage := fmt.Sprintf("Failed to query database for question: %v", err)
 		log.Println(logMessage)
 		return ResponseItem{
 			Question: question,
@@ -185,6 +195,21 @@ func processQuestion(question, prompt, embeddingModel, chatModel string) Respons
 	}
 }
 
+func ToVectorString(data []float64) string {
+	buf := make([]byte, 0, 2+16*len(data))
+	buf = append(buf, '[')
+
+	for i := 0; i < len(data); i++ {
+		if i > 0 {
+			buf = append(buf, ',')
+		}
+		buf = strconv.AppendFloat(buf, float64(data[i]), 'f', -1, 32)
+	}
+
+	buf = append(buf, ']')
+	return string(buf)
+}
+
 func getEmbedding(text, model string) ([]float64, error) {
 	openAIAPIKey := os.Getenv("OPENAI_API_KEY")
 	if openAIAPIKey == "" {
@@ -193,9 +218,11 @@ func getEmbedding(text, model string) ([]float64, error) {
 
 	url := "https://api.openai.com/v1/embeddings"
 	requestBody, err := json.Marshal(OpenAIEmbeddingRequest{
-		Input: text,
-		Model: model,
+		Input:          text,
+		Model:          model,
+		EncodingFormat: "float",
 	})
+
 	if err != nil {
 		return nil, fmt.Errorf("Failed to marshal embedding request: %v", err)
 	}

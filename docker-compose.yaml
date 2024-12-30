@@ -40,6 +40,7 @@ services:
       - POSTGRES_PASSWORD
       - POSTGRES_DB
     volumes:
+      - ./backups:/backups
       - db_storage:/var/lib/postgresql/data
       - ./init-data.sh:/docker-entrypoint-initdb.d/init-data.sh
     healthcheck:
