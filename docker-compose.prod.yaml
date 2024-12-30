@@ -6,12 +6,6 @@ networks:
         - subnet: 10.6.0.0/16
 
 services:
-  ollama:
-    networks:
-      default: ~
-      static-ip:
-        ipv4_address: 10.6.0.20
-
   postgres:
     networks:
       default: ~
@@ -33,3 +27,21 @@ services:
       default: ~
       static-ip:
         ipv4_address: 10.6.0.10
+
+  flowise:
+    hostname: flow.antennae.space
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider https://localhost
+    environment:
+      DEBUG: false
+      PORT: 443
+    networks:
+      default: ~
+      static-ip:
+        ipv4_address: 10.6.0.20
+
+  rag:
+    networks:
+      default: ~
+      static-ip:
+        ipv4_address: 10.6.0.30

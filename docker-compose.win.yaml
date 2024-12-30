@@ -1,8 +1,4 @@
 services:
-  ollama:
-    ports:
-      - "11434:11434"
-
   postgres:
     ports:
       - "5432:5432"
@@ -14,3 +10,19 @@ services:
   n8n:
     ports:
       - "5678:5678"
+
+  flowise:
+    hostname: localhost
+    ports:
+      - "4000:4000"
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:3000
+    environment:
+      DEBUG: true
+      PORT: 4000
+      LOG_LEVEL: info
+      LOG_PATH: /root/.flowise/logs
+
+  rag:
+    ports:
+      - "8080:8080"

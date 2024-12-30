@@ -1,0 +1,14 @@
+### GET request to example server
+POST http://localhost:8080/api/rag
+Content-Type: application/json
+
+{
+  "questions":
+  [
+    "Quels sujets ai-je étudiés récemment ?",
+    "Quelles sont les matières sur lesquelles j'ai déjà travaillé ?",
+    "Quels cours ai-je suivis récemment ?"
+  ]
+}
+
+###
