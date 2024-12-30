@@ -17,6 +17,8 @@ import (
 type Request struct {
 	Questions []string `json:"questions"`
 	Prompt    string   `json:"prompt"`
+	Embedding string   `json:"embedding"`
+	Model     string   `json:"model"`
 }
 
 type ResponseItem struct {
@@ -83,6 +85,23 @@ func handleRAGRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if req.Embedding == "" {
+		req.Embedding = "text-embedding-3-small"
+	}
+
+	if req.Model == "" {
+		req.Model = "gpt-4o"
+	}
+
+	if req.Prompt == "" {
+		req.Prompt = `
+			You are a RAG model answering questions based on provided documents.
+			1. Use only the documents for answers, without personal opinions or extra context. 
+			2. End responses with source filenames and URLs: "[ filename ]( url )".
+			3. If insufficient information is found, say: "The provided documents do not contain enough information to answer the question."
+		`
+	}
+
 	var wg sync.WaitGroup
 	responses := make([]ResponseItem, len(req.Questions))
 
@@ -90,7 +109,7 @@ func handleRAGRequest(w http.ResponseWriter, r *http.Request) {
 		wg.Add(1)
 		go func(i int, question string) {
 			defer wg.Done()
-			responses[i] = processQuestion(question, req.Prompt)
+			responses[i] = processQuestion(question, req.Prompt, req.Embedding, req.Model)
 		}(i, question)
 	}
 
@@ -102,7 +121,7 @@ func handleRAGRequest(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func processQuestion(question, prompt string) ResponseItem {
+func processQuestion(question, prompt, embeddingModel, chatModel string) ResponseItem {
 	const query = `
 		SELECT text
 		FROM n8n_vectors
@@ -111,7 +130,7 @@ func processQuestion(question, prompt string) ResponseItem {
 		LIMIT 10;
 	`
 
-	embedding, err := getEmbedding(question)
+	embedding, err := getEmbedding(question, embeddingModel)
 	if err != nil {
 		logMessage := fmt.Sprintf("Failed to generate embedding for question '%s': %v", question, err)
 		log.Println(logMessage)
@@ -150,7 +169,7 @@ func processQuestion(question, prompt string) ResponseItem {
 		}
 	}
 
-	answer, err := generateAnswer(question, contextTexts, prompt)
+	answer, err := generateAnswer(question, contextTexts, prompt, chatModel)
 	if err != nil {
 		logMessage := fmt.Sprintf("Failed to generate answer for question '%s': %v", question, err)
 		log.Println(logMessage)
@@ -166,7 +185,7 @@ func processQuestion(question, prompt string) ResponseItem {
 	}
 }
 
-func getEmbedding(text string) ([]float64, error) {
+func getEmbedding(text, model string) ([]float64, error) {
 	openAIAPIKey := os.Getenv("OPENAI_API_KEY")
 	if openAIAPIKey == "" {
 		return nil, fmt.Errorf("OpenAI API key is not set")
@@ -175,7 +194,7 @@ func getEmbedding(text string) ([]float64, error) {
 	url := "https://api.openai.com/v1/embeddings"
 	requestBody, err := json.Marshal(OpenAIEmbeddingRequest{
 		Input: text,
-		Model: "text-embedding-ada-002",
+		Model: model,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("Failed to marshal embedding request: %v", err)
@@ -212,7 +231,7 @@ func getEmbedding(text string) ([]float64, error) {
 	return embeddingResponse.Data[0].Embedding, nil
 }
 
-func generateAnswer(question string, context []string, prompt string) (string, error) {
+func generateAnswer(question string, context []string, prompt, model string) (string, error) {
 	openAIAPIKey := os.Getenv("OPENAI_API_KEY")
 	if openAIAPIKey == "" {
 		return "", fmt.Errorf("OpenAI API key is not set")
@@ -227,7 +246,7 @@ func generateAnswer(question string, context []string, prompt string) (string, e
 		{Role: "user", Content: fmt.Sprintf("Question: %s\nContext: %s", question, context)},
 	}
 	requestBody, err := json.Marshal(OpenAIChatRequest{
-		Model:    "gpt-4",
+		Model:    model,
 		Messages: messages,
 	})
 	if err != nil {
