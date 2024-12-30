@@ -16,6 +16,7 @@ import (
 
 type Request struct {
 	Questions []string `json:"questions"`
+	Prompt    string   `json:"prompt"`
 }
 
 type ResponseItem struct {
@@ -32,6 +33,22 @@ type OpenAIEmbeddingResponse struct {
 	Data []struct {
 		Embedding []float64 `json:"embedding"`
 	} `json:"data"`
+}
+
+type OpenAIChatRequest struct {
+	Model    string `json:"model"`
+	Messages []struct {
+		Role    string `json:"role"`
+		Content string `json:"content"`
+	} `json:"messages"`
+}
+
+type OpenAIChatResponse struct {
+	Choices []struct {
+		Message struct {
+			Content string `json:"content"`
+		} `json:"message"`
+	} `json:"choices"`
 }
 
 var db *sql.DB
@@ -73,7 +90,7 @@ func handleRAGRequest(w http.ResponseWriter, r *http.Request) {
 		wg.Add(1)
 		go func(i int, question string) {
 			defer wg.Done()
-			responses[i] = processQuestion(question)
+			responses[i] = processQuestion(question, req.Prompt)
 		}(i, question)
 	}
 
@@ -85,37 +102,61 @@ func handleRAGRequest(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func processQuestion(question string) ResponseItem {
+func processQuestion(question, prompt string) ResponseItem {
 	const query = `
 		SELECT text
 		FROM n8n_vectors
 		WHERE embedding <=> $1
 		ORDER BY embedding <=> $1
-		LIMIT 1;
+		LIMIT 10;
 	`
 
 	embedding, err := getEmbedding(question)
 	if err != nil {
-		log.Printf("Failed to generate embedding for question '%s': %v", question, err)
+		logMessage := fmt.Sprintf("Failed to generate embedding for question '%s': %v", question, err)
+		log.Println(logMessage)
+		return ResponseItem{
+			Question: question,
+			Answer:   logMessage,
+		}
+	}
+
+	rows, err := db.Query(query, embedding)
+	if err != nil {
+		logMessage := fmt.Sprintf("Failed to query database for question '%s': %v", question, err)
+		log.Println(logMessage)
+		return ResponseItem{
+			Question: question,
+			Answer:   logMessage,
+		}
+	}
+	defer rows.Close()
+
+	var contextTexts []string
+	for rows.Next() {
+		var text string
+		if err := rows.Scan(&text); err != nil {
+			logMessage := fmt.Sprintf("Failed to scan row for question '%s': %v", question, err)
+			log.Println(logMessage)
+			continue
+		}
+		contextTexts = append(contextTexts, text)
+	}
+
+	if len(contextTexts) == 0 {
 		return ResponseItem{
 			Question: question,
 			Answer:   "The provided documents do not contain enough information to answer the question.",
 		}
 	}
 
-	var answer string
-	row := db.QueryRow(query, embedding)
-	if err := row.Scan(&answer); err != nil {
-		if err == sql.ErrNoRows {
-			return ResponseItem{
-				Question: question,
-				Answer:   "The provided documents do not contain enough information to answer the question.",
-			}
-		}
-		log.Printf("Failed to query database for question '%s': %v", question, err)
+	answer, err := generateAnswer(question, contextTexts, prompt)
+	if err != nil {
+		logMessage := fmt.Sprintf("Failed to generate answer for question '%s': %v", question, err)
+		log.Println(logMessage)
 		return ResponseItem{
 			Question: question,
-			Answer:   "The provided documents do not contain enough information to answer the question.",
+			Answer:   logMessage,
 		}
 	}
 
@@ -169,4 +210,57 @@ func getEmbedding(text string) ([]float64, error) {
 	}
 
 	return embeddingResponse.Data[0].Embedding, nil
+}
+
+func generateAnswer(question string, context []string, prompt string) (string, error) {
+	openAIAPIKey := os.Getenv("OPENAI_API_KEY")
+	if openAIAPIKey == "" {
+		return "", fmt.Errorf("OpenAI API key is not set")
+	}
+
+	url := "https://api.openai.com/v1/chat/completions"
+	messages := []struct {
+		Role    string `json:"role"`
+		Content string `json:"content"`
+	}{
+		{Role: "system", Content: prompt},
+		{Role: "user", Content: fmt.Sprintf("Question: %s\nContext: %s", question, context)},
+	}
+	requestBody, err := json.Marshal(OpenAIChatRequest{
+		Model:    "gpt-4",
+		Messages: messages,
+	})
+	if err != nil {
+		return "", fmt.Errorf("Failed to marshal chat request: %v", err)
+	}
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(requestBody))
+	if err != nil {
+		return "", fmt.Errorf("Failed to create chat request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", openAIAPIKey))
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("Failed to execute chat request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := ioutil.ReadAll(resp.Body)
+		return "", fmt.Errorf("Chat request failed: %s", string(body))
+	}
+
+	var chatResponse OpenAIChatResponse
+	if err := json.NewDecoder(resp.Body).Decode(&chatResponse); err != nil {
+		return "", fmt.Errorf("Failed to decode chat response: %v", err)
+	}
+
+	if len(chatResponse.Choices) == 0 || chatResponse.Choices[0].Message.Content == "" {
+		return "", fmt.Errorf("No chat response returned")
+	}
+
+	return chatResponse.Choices[0].Message.Content, nil
 }
