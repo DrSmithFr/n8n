@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/joho/godotenv"
 	"log"
 	"net/http"
 	"rag_server/db"
@@ -8,6 +9,11 @@ import (
 )
 
 func main() {
+	// Load env file
+	if err := godotenv.Load(); err != nil {
+		log.Fatal("Error loading .env file")
+	}
+
 	// Initialize database connection
 	dbConn, err := db.InitDB()
 	if err != nil {
