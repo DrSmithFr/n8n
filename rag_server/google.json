@@ -1,0 +1,13 @@
+{
+  "web": {
+    "client_id": "29186344121-1s2nbehf4t67vrc0bs3kpt2tk4v7jeah.apps.googleusercontent.com",
+    "project_id": "atlas-428618",
+    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+    "token_uri": "https://oauth2.googleapis.com/token",
+    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+    "client_secret": "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",
+    "redirect_uris": [
+      "http://localhost:5678/rest/oauth2-credential/callback"
+    ]
+  }
+}

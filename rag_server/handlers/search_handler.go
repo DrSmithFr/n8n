@@ -1,32 +1,30 @@
 package handlers
 
 import (
-	"database/sql"
+	"context"
 	"encoding/json"
+	"github.com/redis/go-redis/v9"
 	"net/http"
 	"rag_server/models"
 	"rag_server/services"
 	"sync"
 )
 
-// HandleRAGRequest handles the RAG API requests
-func HandleRAGRequest(db *sql.DB) http.HandlerFunc {
+// HandleSearchRequest handles the Web Search API requests
+func HandleSearchRequest(rdb *redis.Client, ctx context.Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "Only POST requests are allowed", http.StatusMethodNotAllowed)
 			return
 		}
 
-		var req models.RagRequest
+		var req models.SearchRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, "Invalid JSON body", http.StatusBadRequest)
 			return
 		}
 
 		// Apply defaults
-		if req.Embedding == "" {
-			req.Embedding = "text-embedding-3-small"
-		}
 		if req.Model == "" {
 			req.Model = "gpt-4o"
 		}
@@ -40,13 +38,13 @@ func HandleRAGRequest(db *sql.DB) http.HandlerFunc {
 		}
 
 		var wg sync.WaitGroup
-		responses := make([]models.RagResponseItem, len(req.Questions))
+		responses := make([]models.SearchResponse, len(req.Questions))
 
 		for i, question := range req.Questions {
 			wg.Add(1)
 			go func(i int, question string) {
 				defer wg.Done()
-				responses[i] = services.ProcessQuestion(db, question, req.Prompt, req.Embedding, req.Model)
+				responses[i] = services.ProcessSearch(rdb, ctx, question)
 			}(i, question)
 		}
 

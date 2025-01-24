@@ -1,0 +1,12 @@
+### GET request to example server
+POST http://localhost:8080/api/search
+Content-Type: application/json
+
+{
+  "questions":
+  [
+    "Techniques de meta-prompting pour les modèles de langage (LLM)"
+  ]
+}
+
+###

@@ -7,12 +7,12 @@ import (
 )
 
 // ProcessQuestion processes a single question using embeddings and chat
-func ProcessQuestion(db *sql.DB, question, prompt, embeddingModel, chatModel string) models.ResponseItem {
+func ProcessQuestion(db *sql.DB, question, prompt, embeddingModel, chatModel string) models.RagResponseItem {
 	// Step 1: Generate embedding for the question
 	embedding, err := GetEmbedding(question, embeddingModel)
 	if err != nil {
 		logMessage := fmt.Sprintf("Failed to generate embedding for question '%s': %v", question, err)
-		return models.ResponseItem{
+		return models.RagResponseItem{
 			Question: question,
 			Answer:   logMessage,
 		}
@@ -22,14 +22,14 @@ func ProcessQuestion(db *sql.DB, question, prompt, embeddingModel, chatModel str
 	contextItems, err := SearchItems(db, embedding)
 	if err != nil {
 		logMessage := fmt.Sprintf("Failed to fetch context items for question '%s': %v", question, err)
-		return models.ResponseItem{
+		return models.RagResponseItem{
 			Question: question,
 			Answer:   logMessage,
 		}
 	}
 
 	if len(contextItems) == 0 {
-		return models.ResponseItem{
+		return models.RagResponseItem{
 			Question: question,
 			Answer:   "The database does not contain enough information to answer the question.",
 		}
@@ -45,14 +45,14 @@ func ProcessQuestion(db *sql.DB, question, prompt, embeddingModel, chatModel str
 	answer, err := GenerateAnswer(question, context, prompt, chatModel)
 	if err != nil {
 		logMessage := fmt.Sprintf("Failed to generate answer for question '%s': %v", question, err)
-		return models.ResponseItem{
+		return models.RagResponseItem{
 			Question: question,
 			Answer:   logMessage,
 		}
 	}
 
 	// Step 5: Return the final response
-	return models.ResponseItem{
+	return models.RagResponseItem{
 		Question: question,
 		Answer:   answer,
 	}
